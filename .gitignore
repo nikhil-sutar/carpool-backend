@@ -1,0 +1,35 @@
+# Python
+*.pyc
+*.pyo
+__pycache__/
+*.pyd
+*.db
+*.sqlite3
+
+# Virtual environment
+.venv/
+
+
+# Django
+*.log
+*.pot
+*.pyc
+*.mo
+*.swp
+*.DS_Store
+media/
+profile_pics/
+staticfiles/
+celerybeat-schedule.*
+
+# VS Code
+.vscode/
+
+
+# Environment variables
+.env
+
+# Misc
+*.bak
+*.dir
+*.dat

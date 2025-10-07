@@ -1,0 +1,151 @@
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from django.utils.timezone import localtime
+from rest_framework import serializers
+
+from users.models import DriverProfile
+from users.serializers import UserSerializer
+
+from .models import Ride, Vehicle, VehicleMake, VehicleModel
+
+User = get_user_model()
+
+class PublicDriverSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    def get_name(self,obj):
+        return f"{obj.profile.first_name} {obj.profile.last_name}"
+    
+    class Meta:
+        model = DriverProfile
+        fields = ['profile','name','is_driver_verified','total_rides_as_a_driver','rating','updated_at']
+
+class PublicVehicleSerializer(serializers.ModelSerializer):
+    model_name = serializers.SerializerMethodField()
+    class Meta:
+        model = Vehicle
+        fields = ['model_name','color']
+
+    def get_model_name(self,obj):
+        return f"{obj.model.make.name} {obj.model.name}"
+
+class RideSerializer(serializers.ModelSerializer):
+    driver = PublicDriverSerializer(read_only=True)
+    vehicle = PublicVehicleSerializer(read_only=True)
+    vehicle_id = serializers.PrimaryKeyRelatedField(source='vehicle',queryset=Vehicle.objects.all(),write_only=True)
+    status_display = serializers.CharField(source='get_status_display',read_only=True)
+    duration = serializers.SerializerMethodField()
+    duration_display = serializers.SerializerMethodField()
+    # available_seats = serializers.SerializerMethodField(read_only=True)
+    def get_duration(self,obj):
+        start_time = obj.start_time
+        end_time = obj.end_time
+        delta = abs(end_time - start_time)
+        return delta.total_seconds()
+    
+    def get_duration_display(self,obj):
+        delta = abs(obj.end_time - obj.start_time)
+        hours,remainder = divmod(delta.total_seconds(),3600) #return delta//3600 & delta % 3600
+        minutes, _ = divmod(remainder,60)
+        if minutes == 0:
+            return f"{int(hours)}h"
+        return f"{int(hours)}h {int(minutes)}m"
+
+    class Meta:
+        model = Ride
+        fields = ['driver','vehicle','vehicle_id','source','destination','boarding_points','dropping_points','fare','seats_offered','seats_booked','seats_available','status','status_display','start_time','end_time','duration','duration_display','created_at','updated_at']
+        read_only_fields = ['driver','seats_booked','seats_available','created_at','updated_at','duration','duration_display']
+    
+    def validate_vehicle_id(self,value):
+        vehicle = value
+        # print("1)Vehicle:",vehicle)
+        user = self.context['request'].user
+        if user != vehicle.owner:
+            raise serializers.ValidationError("Please specify the ID of your own vehicle.")
+        return value
+    
+    def validate_fare(self,value):
+        if value < 50:
+            raise serializers.ValidationError("Fare must be at least 10 INR.")
+        elif value > 10000:
+            raise serializers.ValidationError("Fare seems unreasonably high.")
+        return value
+
+    def validate_start_time(self,value):
+        request = self.context['request']
+        user = request.user
+        same_day_ride = Ride.objects.filter(start_time__date = value ).order_by('-pk').first()
+        if value < localtime():
+            raise serializers.ValidationError("Start time should be greater than current time")
+        
+        if Ride.objects.filter(driver=user,start_time = value).exists() and request.method not in ['PUT','PATCH']:
+            raise serializers.ValidationError("You already have a ride scheduled at this time")
+        if same_day_ride is not None:
+            if value <= same_day_ride.end_time:
+                raise serializers.ValidationError("The new ride should start after completion of last ride created.") 
+        return value
+    
+    def validate(self, attrs):
+        vehicle = attrs.get('vehicle')
+        seats_offered = attrs.get('seats_offered')
+        start_time = attrs.get('start_time')
+        end_time = attrs.get('end_time')
+        if seats_offered == 0 or seats_offered > vehicle.seats-1:
+            raise serializers.ValidationError(f"Offered seats should be in range 1-{vehicle.seats-1}")
+
+        if end_time < start_time:
+            raise serializers.ValidationError("End time should be after start time")
+
+        return attrs
+    
+    def create(self, validated_data):
+        # driver = self.context['request'].user
+        ride = Ride.objects.create(**validated_data)
+        return ride
+
+    def update(self, instance, validated_data):
+        if instance.status != Ride.StatusChoices.OPEN:
+            for field in ['vehicle','fare','seats_offered','start_time']:
+                if field in validated_data:
+                    raise serializers.ValidationError(f"{field} cannot be updated once ride is active.")
+        return super().update(instance, validated_data)
+
+class VehicleMakeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VehicleMake
+        fields = ['id','name']
+
+class VehicleModelSerializer(serializers.ModelSerializer):
+    make_display = serializers.SerializerMethodField(read_only=True)
+
+    def get_make_display(self,obj):
+        return f"{obj.make.name}"
+    
+    class Meta:
+        model = VehicleModel
+        fields = ['id','make','make_display','name']
+
+class VehicleSerializer(serializers.ModelSerializer):
+    owner_display = serializers.SerializerMethodField(read_only=True)
+    model_display = serializers.SerializerMethodField(read_only=True)
+
+    def get_owner_display(self,obj):
+        return f"{obj.owner.email}"
+    def get_model_display(self,obj):
+        return f"{obj.model.make.name} {obj.model.name}"
+    class Meta:
+        model = Vehicle
+        fields = ['owner','owner_display','model','model_display','registration_number','seats','color','manufacture_year']
+        read_only_fields = ['owner','owner_display','model_display']
+    
+    def validate_seats(self,value):
+        if value > 7:
+            raise serializers.ValidationError("Passenger vehicle can't have more than 7 seats.")
+        return value
+    
+    def validate_manufacture_year(self,value):
+        print(type(value))
+        if int(value) > timezone.now().year:
+            raise serializers.ValidationError("Year can't be greater than current year.")
+        return value
+    
