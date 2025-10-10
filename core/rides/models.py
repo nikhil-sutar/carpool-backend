@@ -50,7 +50,7 @@ class Vehicle(models.Model):
         return f"{self.owner.profile.first_name}'s {self.model.make.name} {self.model.name} ({self.registration_number})"
 
 class Ride(models.Model):
-    class StatusChoices(models.TextChoices):
+    class RideStatus(models.TextChoices):
         OPEN = 'open','Open'
         FULL = 'full','Full'
         COMPLETED = 'completed','Completed'
@@ -66,7 +66,7 @@ class Ride(models.Model):
     seats_offered = models.PositiveSmallIntegerField()
     seats_booked = models.PositiveSmallIntegerField(default=0)
     seats_available = models.PositiveSmallIntegerField(null=True,blank=True)
-    status = models.CharField(max_length=10,choices=StatusChoices.choices,default=StatusChoices.OPEN)
+    status = models.CharField(max_length=10,choices=RideStatus.choices,default=RideStatus.OPEN)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(blank=True,null=True)
     created_at = models.DateTimeField(auto_now_add=True)

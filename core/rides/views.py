@@ -3,6 +3,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.filters import SearchFilter
 
 from .filters import RideFilter
 from .models import Ride, Vehicle, VehicleMake, VehicleModel
@@ -17,6 +18,7 @@ class RideViewset(viewsets.ModelViewSet):
     queryset = Ride.objects.all()
     serializer_class = RideSerializer
     filterset_class = RideFilter
+    search_fields = ['source','destination']
     def get_queryset(self):
         qs = Ride.objects.select_related('driver__profile','vehicle__model__make')
         user = self.request.user

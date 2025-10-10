@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime 
 from django.utils.timezone import localtime
 from rest_framework import serializers
 
@@ -74,15 +75,25 @@ class RideSerializer(serializers.ModelSerializer):
     def validate_start_time(self,value):
         request = self.context['request']
         user = request.user
-        same_day_ride = Ride.objects.filter(start_time__date = value ).order_by('-pk').first()
+        end_time = self.initial_data.get('end_time')
+        if not end_time:
+            raise serializers.ValidationError("End time is required to validate start time")
+        if isinstance(end_time,str):
+            end_time = parse_datetime(end_time)
+
         if value < localtime():
             raise serializers.ValidationError("Start time should be greater than current time")
         
-        if Ride.objects.filter(driver=user,start_time = value).exists() and request.method not in ['PUT','PATCH']:
-            raise serializers.ValidationError("You already have a ride scheduled at this time")
-        if same_day_ride is not None:
-            if value <= same_day_ride.end_time:
-                raise serializers.ValidationError("The new ride should start after completion of last ride created.") 
+        overlapping_ride = Ride.objects.filter(
+            driver = user,
+            start_time__lt = end_time,
+            end_time__gt = value,
+            status__in = [Ride.RideStatus.OPEN,Ride.RideStatus.FULL]
+        ).exclude(id = self.instance.id if self.instance else None)
+
+        if overlapping_ride.exists():
+            raise serializers.ValidationError("You already have another ride scheduled during this time period.")
+    
         return value
     
     def validate(self, attrs):
@@ -104,7 +115,7 @@ class RideSerializer(serializers.ModelSerializer):
         return ride
 
     def update(self, instance, validated_data):
-        if instance.status != Ride.StatusChoices.OPEN:
+        if instance.status != Ride.RideStatus.OPEN:
             for field in ['vehicle','fare','seats_offered','start_time']:
                 if field in validated_data:
                     raise serializers.ValidationError(f"{field} cannot be updated once ride is active.")
