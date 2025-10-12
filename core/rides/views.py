@@ -9,8 +9,10 @@ from .filters import RideFilter
 from .models import Ride, Vehicle, VehicleMake, VehicleModel
 from .permissions import IsDriver, IsDriverVerified
 from .serializers import (RideSerializer, VehicleMakeSerializer,
-                          VehicleModelSerializer, VehicleSerializer)
+                          VehicleModelSerializer, VehicleSerializer,
+                          BookingsDetailsSerialzer)
 from .tasks import send_ride_confirmation_email
+from bookings.models import Booking
 
 # Create your views here.
 
@@ -22,12 +24,14 @@ class RideViewset(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Ride.objects.select_related('driver__profile','vehicle__model__make')
         user = self.request.user
-        if self.action in ['update','partial_update','create','destroy']:
-            return qs.filter(driver=user)
-        return qs.filter(status=Ride.StatusChoices.OPEN)
+        if self.action in ['update','partial_update','create','destroy','bookings_details']:
+            qs = qs.filter(driver=user)
+            return qs
+        return qs.filter(status=Ride.RideStatus.OPEN)
     
     def get_permissions(self):
-        if self.action in ['create','update','destroy','partial_update']:
+        print("In get permission",self.action)
+        if self.action in ['create','update','destroy','partial_update','bookings_details']:
             permissions = [IsAuthenticated,IsDriverVerified]
         else:
             permissions = [IsAuthenticated]
@@ -42,40 +46,36 @@ class RideViewset(viewsets.ModelViewSet):
             ride_id = ride.id
         )
 
-
     # Here POST is used to make API clearer by telling its just not a field update but an action or command to server
     @action(detail=True,methods=['POST'])
     def cancel(self,request,pk=None):
         ride = self.get_object()
         if ride.driver != request.user:
             return Response({"error":"Not your ride"},status=status.HTTP_403_FORBIDDEN)
-        elif ride.status != Ride.StatusChoices.OPEN:
+        elif ride.status != Ride.RideStatus.OPEN:
             return Response({"error":"Ride is not active."}, status=status.HTTP_400_BAD_REQUEST)
-        ride.status = Ride.StatusChoices.CANCELLED
+        ride.status = Ride.RideStatus.CANCELLED
         ride.save()
         return Response({"status":"Ride cancelled"},status=status.HTTP_200_OK)
-    
-    @action(detail=True,methods=['POST'])
-    def complete(self,request,pk=None):
-        ride = self.get_object()
-        user = request.user
-        if ride.driver != user:
-            return Response({"error":"Not your ride"},status=status.HTTP_403_FORBIDDEN)
-        elif ride.status != Ride.StatusChoices.OPEN:
-            return Response({"error":"Ride is not active."}, status=status.HTTP_400_BAD_REQUEST)
-        ride.status = Ride.StatusChoices.COMPLETED
-        ride.save()
-        user.total_rides_as_a_driver += 1
-        user.save()
-        return Response({"status":"Ride Completed"})
+
 
     @action(detail=False,methods=['GET'])
     def my_rides(self,request,pk=None):
         user = request.user
         rides = Ride.objects.filter(driver=user)
         serializer = self.get_serializer(rides,many=True)
-        return Response({"ride-data":serializer.data},status=status.HTTP_200_OK)
-
+        return Response({"my_rides":serializer.data},status=status.HTTP_200_OK)
+    
+    @action(detail=True,methods=['GET'])
+    def bookings_details(self,request,pk=None):
+        print("Before executing get_object")
+        ride = self.get_object()
+        print("After executing get_object")
+        self.check_object_permissions(request,ride)
+        print("Object level permission checked...")
+        serializer = BookingsDetailsSerialzer(ride)
+        return Response(serializer.data,status=status.HTTP_200_OK)
+        
 class VehicleMakeViewset(viewsets.ModelViewSet):
     queryset = VehicleMake.objects.all()
     serializer_class = VehicleMakeSerializer

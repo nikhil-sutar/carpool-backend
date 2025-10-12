@@ -7,7 +7,9 @@ from rest_framework import serializers
 from users.models import DriverProfile
 from users.serializers import UserSerializer
 
-from .models import Ride, Vehicle, VehicleMake, VehicleModel
+from .models import Ride, Vehicle, VehicleMake, VehicleModel, Location
+from .utils import get_or_create_location_async
+from bookings.models import Booking
 
 User = get_user_model()
 
@@ -33,7 +35,13 @@ class PublicVehicleSerializer(serializers.ModelSerializer):
 class RideSerializer(serializers.ModelSerializer):
     driver = PublicDriverSerializer(read_only=True)
     vehicle = PublicVehicleSerializer(read_only=True)
-    vehicle_id = serializers.PrimaryKeyRelatedField(source='vehicle',queryset=Vehicle.objects.all(),write_only=True)
+    vehicle_id = serializers.PrimaryKeyRelatedField(
+        source='vehicle',
+        queryset=Vehicle.objects.all(),
+        write_only=True
+    )
+    source = serializers.CharField()
+    destination = serializers.CharField()
     status_display = serializers.CharField(source='get_status_display',read_only=True)
     duration = serializers.SerializerMethodField()
     duration_display = serializers.SerializerMethodField()
@@ -54,8 +62,8 @@ class RideSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ride
-        fields = ['driver','vehicle','vehicle_id','source','destination','boarding_points','dropping_points','fare','seats_offered','seats_booked','seats_available','status','status_display','start_time','end_time','duration','duration_display','created_at','updated_at']
-        read_only_fields = ['driver','seats_booked','seats_available','created_at','updated_at','duration','duration_display']
+        fields = ['id','driver','vehicle','vehicle_id','source','destination','boarding_points','dropping_points','fare','seats_offered','seats_booked','seats_available','status','status_display','start_time','end_time','duration','duration_display','created_at','updated_at']
+        read_only_fields = ['driver','seats_booked','seats_available','status','created_at','updated_at','duration','duration_display']
     
     def validate_vehicle_id(self,value):
         vehicle = value
@@ -110,7 +118,13 @@ class RideSerializer(serializers.ModelSerializer):
         return attrs
     
     def create(self, validated_data):
-        # driver = self.context['request'].user
+        source_name = validated_data.pop('source')
+        destination_name = validated_data.pop('destination')
+
+        source_obj = get_or_create_location_async(source_name)
+        destination_obj = get_or_create_location_async(destination_name)
+        validated_data['source'] = source_obj
+        validated_data['destination'] = destination_obj
         ride = Ride.objects.create(**validated_data)
         return ride
 
@@ -159,4 +173,34 @@ class VehicleSerializer(serializers.ModelSerializer):
         if int(value) > timezone.now().year:
             raise serializers.ValidationError("Year can't be greater than current year.")
         return value
+
+class BookingsDetailsSerialzer(serializers.Serializer):
+    trip = serializers.SerializerMethodField(read_only=True)
+    date = serializers.SerializerMethodField(read_only=True)
+    time = serializers.SerializerMethodField(read_only=True)
+    seats_booked = serializers.SerializerMethodField(read_only=True)
+    passenger_details = serializers.SerializerMethodField(read_only=True)
+
+    def get_trip(self,obj):
+        return f"Trip from {obj.source} to {obj.destination}"
     
+    def get_date(self,obj):
+        return localtime(obj.start_time.date())
+
+    def get_time(self,obj):
+        return localtime(obj.start_time.time().strftime("%I:%M %p"))
+    
+    def get_seats_booked(self,obj):
+        return obj.seats_booked
+    
+    def get_passenger_details(self,obj):
+        bookings = Booking.objects.filter(ride=obj.id).select_related('passenger__profile')
+        data = [{
+            'passenger':booking.passenger.profile.first_name,
+            'boarding_point': booking.boarding_point,
+            'dropping_point': booking.dropping_point,
+            'seats_booked':booking.seats_booked,
+            'contact':booking.passenger.phone_number
+        } for booking in bookings]
+
+        return data

@@ -1,11 +1,11 @@
 from django.db import transaction
 from django.db.models import F
+from django.utils.timezone import localtime
 from rest_framework import serializers
 
 from rides.models import Ride
 
 from .models import Booking, Payment
-
 
 class BookingSerializer(serializers.ModelSerializer):
     passenger_display = serializers.SerializerMethodField(read_only=True)
@@ -20,10 +20,10 @@ class BookingSerializer(serializers.ModelSerializer):
         return f"Trip from {obj.ride.source} to {obj.ride.destination}"
     
     def get_date(self,obj):
-        return obj.ride.start_time.date()
+        return localtime(obj.ride.start_time).date()
     
     def get_time(self,obj):
-        return obj.ride.start_time.time().strftime("%I:%M %p")
+        return localtime(obj.ride.start_time).time().strftime("%I:%M %p")
     
     class Meta:
         model = Booking
@@ -34,6 +34,15 @@ class BookingSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError("You must book at least 1 seat.")
         return value
+    def validate(self, attrs):
+        boarding_point = attrs.get('boarding_point')
+        dropping_point = attrs.get('dropping_point')
+        ride = attrs.get('ride')
+        if boarding_point not in ride.boarding_points:
+            raise serializers.ValidationError("Please give correct boarding point.")
+        if dropping_point not in ride.dropping_points:
+            raise serializers.ValidationError("Please give correct dropping point.")
+        return attrs
     
     def create(self, validated_data):
         ride_id = validated_data.get('ride').id

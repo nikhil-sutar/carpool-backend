@@ -18,7 +18,7 @@ class Booking(models.Model):
     boarding_point = models.CharField(max_length=250)
     dropping_point = models.CharField(max_length=250)
     seats_booked = models.IntegerField(validators=[MinValueValidator(1)])
-    status = models.CharField(choices=BookingStatus.choices,default=BookingStatus.CONFIRMED)
+    status = models.CharField(choices=BookingStatus.choices,default=BookingStatus.PENDING)
 
     class Meta:
         constraints = [

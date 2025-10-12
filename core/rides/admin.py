@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Ride, Vehicle, VehicleMake, VehicleModel
+from .models import Ride, Vehicle, VehicleMake, VehicleModel, Location
 
 # Register your models here.
 
@@ -19,5 +19,9 @@ class VehicleAdmin(admin.ModelAdmin):
 @admin.register(Ride)
 class RideAdmin(admin.ModelAdmin):
     list_display = ['id','driver','vehicle','source','destination','fare','seats_offered','seats_booked','seats_available','status','start_time','end_time']
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ['id','name','latitude','longitude','is_verified']
 
 

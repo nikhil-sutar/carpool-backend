@@ -11,7 +11,7 @@ router.register('driver-profile',views.DriverProfileViewset)
 router.register('passenger-profile',views.PassengerProfileViewset)
 router.register('driver-documents',views.DriverDocumentViewset)
 router.register('driver-verification',views.DriverVerificationViewset)
-router.register('approve-verification-requests',views.DriverVerificationAdminViewset,basename="driver-verification-approval")
+router.register('driver-verification-requests',views.DriverVerificationAdminViewset,basename="driver-verification-approval")
 urlpatterns = [
     path('register/', views.UserListCreateAPIView.as_view(), name = 'register'),
     path('', include(router.urls)),

@@ -36,10 +36,6 @@ class BookingViewSet(viewsets.ModelViewSet):
             qs = qs
         else:
             qs = qs.filter(ride__driver = self.request.user)
-        
-        print("Query params:", self.request.query_params)
-        print("Final queryset:", qs.query)  # SQL generated
-
         return qs
 
     def get_permissions(self):

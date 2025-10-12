@@ -49,6 +49,15 @@ class Vehicle(models.Model):
     def __str__(self):
         return f"{self.owner.profile.first_name}'s {self.model.make.name} {self.model.name} ({self.registration_number})"
 
+class Location(models.Model):
+    name = models.CharField(max_length=100,unique=True)
+    latitude = models.FloatField(blank=True,null=True)
+    longitude = models.FloatField(blank=True,null=True)
+    is_verified = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
 class Ride(models.Model):
     class RideStatus(models.TextChoices):
         OPEN = 'open','Open'
@@ -58,25 +67,22 @@ class Ride(models.Model):
     
     driver = models.ForeignKey(User,on_delete=models.PROTECT,related_name='rides')
     vehicle = models.ForeignKey(Vehicle,on_delete=models.PROTECT,related_name='rides')
-    source = models.CharField(max_length=250)
-    destination = models.CharField(max_length=250)
+    source = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="rides_as_source",db_index=True)
+    destination = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="rides_as_destination",db_index=True)
     boarding_points = models.JSONField(default=list)
     dropping_points = models.JSONField(default=list)
     fare = models.DecimalField(max_digits=8,decimal_places=2)
     seats_offered = models.PositiveSmallIntegerField()
     seats_booked = models.PositiveSmallIntegerField(default=0)
-    seats_available = models.PositiveSmallIntegerField(null=True,blank=True)
-    status = models.CharField(max_length=10,choices=RideStatus.choices,default=RideStatus.OPEN)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField(blank=True,null=True)
+    status = models.CharField(max_length=10,choices=RideStatus.choices,default=RideStatus.OPEN,db_index=True)
+    start_time = models.DateTimeField(db_index=True)
+    end_time = models.DateTimeField(db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def save(self,*args, **kwargs):
-        if not self.pk:
-            self.seats_available = self.seats_offered
-        else:
-            self.seats_available = self.seats_offered - self.seats_booked
-        return super().save(*args, **kwargs)
+    @property
+    def seats_available(self):
+        return self.seats_offered - self.seats_booked
+    
     def __str__(self):
         return f"{self.driver.profile.first_name}'s from {self.source} to {self.destination} on {self.start_time}"

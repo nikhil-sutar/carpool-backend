@@ -20,6 +20,7 @@ __pycache__/
 media/
 profile_pics/
 staticfiles/
+Docs/
 celerybeat-schedule.*
 
 # VS Code
@@ -33,3 +34,4 @@ celerybeat-schedule.*
 *.bak
 *.dir
 *.datdocs/
+

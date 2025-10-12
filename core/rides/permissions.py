@@ -10,7 +10,7 @@ class IsDriver(permissions.BasePermission):
         return request.user.role == User.Roles.DRIVER
     
     def has_object_permission(self, request, view, obj):
-        return obj.owner == request.user
+        return obj.driver == request.user
 
 class IsDriverVerified(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -25,3 +25,6 @@ class IsDriverVerified(permissions.BasePermission):
             return driver.is_driver_verified
         else:
             return False
+    def has_object_permission(self, request, view, obj):
+        print("Checking object level permission...")
+        return obj.driver == request.user
